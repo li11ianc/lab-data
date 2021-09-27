@@ -1,0 +1,19 @@
+---
+title: "exploratory case 1"
+author: "Lillian Clark"
+date: "9/1/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(ChineseNames)
+```
+
+```{r}
+familyname
+givenname
+top1000name.prov
+top100name.year
+top50char.year
+```

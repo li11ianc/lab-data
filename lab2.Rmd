@@ -1,0 +1,91 @@
+---
+title: "lab2"
+author: "Lillian Clark"
+date: "9/6/2021"
+output: pdf_document
+---
+
+(Spent most of lab trying to install `rstanarm`)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rstanarm)
+library(bayesplot)
+```
+
+```{r}
+bike <- read_csv("210830_bikecrash.csv")
+```
+
+```{r}
+bike_new <- bike %>%
+  mutate(crashes_pc = crashes / (pop / 100000),
+         high_crash_cty = case_when(
+           crashes_pc >= 60 ~ 1,
+           TRUE ~ 0),
+         high_crash_cty = as.factor(high_crash_cty))
+```
+
+```{r}
+summary(bike_new$high_crash_cty)
+summary(bike_new$pct_rural)
+
+ggplot(bike_new, aes(x = high_crash_cty, y = pct_rural)) +
+  geom_boxplot()
+```
+
+```{r}
+m0 <- glm(high_crash_cty ~ I(pop/1000000) + pct_rural, data = bike_new, family = "binomial")
+round(summary(m0)$coef, 6)
+```
+
+We use the estimate and standard error from a frequentist GLM as our prior for the intercept in our Bayesian regression.
+
+```{r}
+m1 <- stan_glm(high_crash_cty ~ I(pop/1000000) + pct_rural, 
+                         data = bike_new, 
+                         family = binomial(link = "logit"),
+                         prior_intercept = normal(.995, .846),
+                         prior = normal(0, 100, autoscale = T), 
+                         chains = 2, iter = 10000, seed = 9763, 
+                         prior_PD = F)
+```
+
+```{r}
+prior_summary(m1)
+color_scheme_set(c("darkblue", "darkred", "darkgray", 
+                   "deepskyblue", "deeppink", "darkgreen"))
+plot(m1, "trace")
+plot(m1, "trace", pars = "pct_rural") +
+  labs(title = "Trace plot: percent rural", 
+       y = "Estimate", x = "Draw")
+pp_check(m1, plotfun = "hist", nreps = 5) + 
+  xlab("Crashes")
+pp_check(m1) + 
+  xlab("Crashes")
+plot(m1, "acf_bar") +         # compare to "acf"
+  labs(title = "ACF plots")
+plot(m1, "dens_overlay")
+round(as.data.frame(summary(m1)), 2)
+```
+
+```{r}
+bike_new %>% 
+  filter(county == "Durham")
+durham <- posterior_predict(m1, 
+                            newdata = data.frame(pop = 316739,
+                                                 pct_rural = 6),
+                            draws = 1000)
+head(durham)
+ggplot(as.data.frame(durham), aes(x = durham)) +
+  geom_histogram(color = "darkblue", fill = "skyblue") +
+  labs(x = "Posterior predictions", y = "Count") +
+  geom_vline(xintercept = 340, color = "darkred", lwd = 2)
+```
+
+Is there evidence of an association between rurality and being a high-crash county, after adjusting for population? Explain, and quantify any variability in your estimates. Be sure to evaluate model convergence.
+
+asks the beta coefficient for pct_rural
+variability in beta_1
+
