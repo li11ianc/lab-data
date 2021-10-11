@@ -1,0 +1,110 @@
+---
+title: "Survival Analysis: Game of Thrones"
+author: "Lillian Clark"
+date: "9/27/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(rstanarm)
+library(survminer)
+library(survival)
+```
+
+```{r}
+got <- read_csv("210927_got.csv")
+```
+
+Explore the data! Can you create a useful visualization that summarizes some aspects of the time-to-death in this dataset? Does there appear to be evidence of differential survival depending on certain characteristics (gender, royalty status, etc.)? What about potential confounders?
+
+The following variables will be used:
+
+duration_in_episodes: the number of episodes the character has made it to “so-far” through the end of Season 7 (we’re ignoring Season 8 because it’s hot trash)
+is_dead: whether the character is dead
+character_name: character name
+royal: whether the character is a royal
+house: which great house of Westeros the character belongs to (if any)
+gender: gender of the character
+
+```{r}
+got <- got %>%
+  select(character_name, gender, house, royal, duration_in_episodes, is_dead)
+```
+
+
+```{r}
+ggsurvplot(survfit(Surv(duration_in_episodes, is_dead) ~ 1, data = got), 
+     xlab = "Duration in Episodes", ylab = "Est. Survival Probability",
+     conf.int = F)
+
+ggsurvplot(survfit(Surv(duration_in_episodes, is_dead) ~ gender, data = got), 
+     xlab = "Duration in Episodes", ylab = "Est. Survival Probability",
+     ylim = c(0, 1),
+     conf.int = T, censor = F)
+
+ggsurvplot(survfit(Surv(duration_in_episodes, is_dead) ~ house, data = got), 
+     xlab = "Duration in Episodes", ylab = "Est. Survival Probability",
+     ylim = c(0, 1),
+     conf.int = T, censor = F)
+
+ggsurvplot(survfit(Surv(duration_in_episodes, is_dead) ~ royal, data = got), 
+     xlab = "Duration in Episodes", ylab = "Est. Survival Probability",
+     ylim = c(0, 1),
+     conf.int = T, censor = F)
+
+ggsurvplot(survfit(Surv(duration_in_episodes, is_dead) ~ gender + royal, data = got), 
+     xlab = "Duration in Episodes", ylab = "Est. Survival Probability",
+     ylim = c(0, 1),
+     conf.int = T, censor = F)
+
+survdiff(Surv(duration_in_episodes, is_dead) ~ royal, data = got)
+survdiff(Surv(duration_in_episodes, is_dead) ~ gender, data = got)
+survdiff(Surv(duration_in_episodes, is_dead) ~ house, data = got)
+```
+House seems like overfitting
+
+```{r}
+m1 <- stan_surv(Surv(duration_in_episodes, is_dead) ~ royal + gender, 
+                data = got, basehaz = "weibull",
+               prior = normal(autoscale = T),
+               prior_intercept = normal(autoscale = T),
+               prior_aux = cauchy(0, 5, autoscale = T),
+               chains = 2, iter = 2000, seed = 123,
+               prior_PD = F)
+
+m2 <- stan_surv(Surv(duration_in_episodes, is_dead) ~ royal + gender, 
+                data = got, basehaz = "weibull-aft",
+               prior = normal(autoscale = T),
+               prior_intercept = normal(autoscale = T),
+               prior_aux = cauchy(0, 5, autoscale = T),
+               chains = 2, iter = 2000, seed = 123,
+               prior_PD = F)
+```
+
+```{r}
+prior_summary(m1)
+summary(m1)
+round(as.data.frame(summary(m1)), 2)
+round(as.data.frame(summary(m1))[,c(1, 3, 7)], 3)
+plot(m1, plotfun = "basehaz")
+ps_check(m1)
+plot(m1, "dens_overlay")
+plot(m1, "trace")
+
+prior_summary(m2)
+summary(m2)
+round(as.data.frame(summary(m2)), 2)
+round(as.data.frame(summary(m2))[,c(1, 3, 7)], 3)
+plot(m2, plotfun = "basehaz")
+ps_check(m2)
+plot(m2, "dens_overlay")
+plot(m2, "trace")
+```
+
+
+
